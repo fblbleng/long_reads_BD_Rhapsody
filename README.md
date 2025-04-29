@@ -1,4 +1,4 @@
-#1. High-quality extraction of true mRNA molecules from long-read single-cell
+### 1. High-quality extraction of true mRNA molecules from long-read single-cell
 
 ## 🔍 Purpose
 Preprocess long-read single-cell RNA-seq data to extract:
