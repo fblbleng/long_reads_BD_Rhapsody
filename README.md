@@ -61,7 +61,7 @@ Printed to console after processing:
 ```
 python3 bd_rhapsody_barcode_extractor.py -i C10_010425/subset100K.fastq.gz -o processed.fastq.gz -b barcode_list.tsv.gz -a ACACGACGCTCTTCCGATCT --barcode_len 38 --umi_len 8  --scan_region 150 --min_read_length 200 --ncores 8 
 ```
-# 2. BD Rhapsody-Style Long-Read CB Assigner
+## 2. BD Rhapsody-Style Long-Read CB Assigner
 
 ## 🔍 Purpose
 This pipeline refines the list of extracted cell barcodes (CBs) and unique molecular identifiers (UMIs) from long-read single-cell RNA sequencing (scRNA-seq) datasets (e.g., Nanopore) using BD Rhapsody protocols.
