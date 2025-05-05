@@ -74,8 +74,24 @@ It **does NOT** collapse UMIs at this stage (UMI collapsing is to be done later)
 
 ---
 
-## How It Works
 
+## 📋 Preliminary: Generate UMI‐count Table
+
+If you haven’t already built the CB × UMI count table from your raw `barcode_list.tsv.gz`, run:
+
+```bash
+printf "BC\tUMI\n" && \
+zcat barcode_list.tsv.gz \
+  | cut -f4,5 \               # extract BC and UMI
+  | sort -u \                 # unique BC-UMI pairs
+  | cut -f1 \                 # keep only BC
+  | sort \                    # sort barcodes
+  | uniq -c \                 # count UMIs per BC
+  | sort -k1,1nr \            # descending by UMI count
+  | awk '{print $2 "\t"$1}'   # swap and format as "BC<TAB>UMI"
+| gzip > CB_count_table.tsv.gz
+```
+## How It Works
 ### 1. Load & Filter
 - **Input**: the UMI-count table (`CB_count_table.tsv.gz`) with columns `BC` (barcode) and `UMI`.  
 - **Filter**: drop any barcode with fewer than `--min_umi_per_cb` UMIs.  
