@@ -49,7 +49,7 @@ Printed to console after processing:
 
 ---
 
-## 🔮 Example Read Structure Expected
+## Example Read Structure Expected
 ```
 [ADAPTER] [CB (38 nt)] [UMI (8 nt)] [INSERT] [polyA/T]
 ```
@@ -74,43 +74,55 @@ It **does NOT** collapse UMIs at this stage (UMI collapsing is to be done later)
 
 ---
 
-## 🔧 How It Works
+## How It Works
 
-### 1. Load CB List
-- Reads the `barcode_list.tsv.gz` generated from preprocessing (Scanner pipeline)
+### 1. Load & Filter
+- **Input**: the UMI-count table (`CB_count_table.tsv.gz`) with columns `BC` (barcode) and `UMI`.  
+- **Filter**: drop any barcode with fewer than `--min_umi_per_cb` UMIs.  
+- **Sort**: descending by UMI count.
 
-### 2. Estimate Cell Number
-- Computes UMI counts per CB
-- Plots UMI count vs barcode rank (log-log)
-- Detects "knee point" (where signal drops dramatically) to estimate the number of cells
+### 2. Detect Knee & Rescue
+- Compute **log₁₀(UMI + 1)** versus barcode rank.  
+- Calculate per-point slope via numerical gradient.  
+- **Smooth** slopes by binning on log₁₀(rank) (`--smooth_res`) and take the bin with the lowest median slope → **knee**.  
+- Extend cutoff by `1 + rescue_frac` (e.g. +10 %) → **rescue**.
 
-### 3. Merge Barcodes
-- Among top-ranked CBs (up to knee point), barcodes are merged if:
-  - Levenshtein distance ≤ `--merge_distance` (default: 3)
+### 3. Select Barcodes
+- Mark all barcodes from rank 1 up through the **rescue** rank as **selected_raw**.
 
-### 4. Output
-- A cleaned table with one **Representative_CB** per cell
-- A plot (`knee_plot.png`) showing the UMI distribution and knee point if `--plot` is enabled
+### 4. Merge Barcodes
+- Take the **selected_raw** barcodes and cluster them by Levenshtein distance:
+  - **Absolute** cutoff: `--merge_dist` (e.g. ≤ 2)
+  - **Fractional** cutoff: `--merge_frac` × (BC length), if specified
+- Collapse each cluster into a single **representative** barcode (`rep_id`).
 
----
-
-## 📂 Input Requirements
-
-- `barcode_list.tsv.gz`
-  - Must contain at least columns: `read_id`, `BC`, `UMI`
+### 5. Output
+- **Extended count table** (`--count_out`):
+  - Columns:  
+    - `BC`   (original barcode)  
+    - `UMI`  (UMI count)  
+    - `rep_id` (collapsed representative barcode)  
+    - `selected_raw` (True if ≤ rescue rank)  
+- **Merged list** (`--merged_out`):
+  - One line per `rep_id`, listing its member barcodes.  
+- **Optional plot** (`--plot`):
+  - Saves `knee_rescue.png` showing the log-log UMI curve with knee & rescue cutoffs.
 
 ---
 
 ## 🔠 Usage
 
 ```bash
-python3 bd_assigner.py \
-    -i barcode_list.tsv.gz \
-    -o CB_count_table.tsv.gz \
-    --min_UMI_per_CB 10 \
-    --merge_distance 3 \
-    --plot \
-    -t 4
+python3 bd_assign.py \
+  -i CB_count_table.tsv.gz \
+  -o CB_counting_ext.tsv.gz \
+  -m CB_merged_list.txt \
+  [--min_umi_per_cb 5] \
+  [--smooth_res 0.001] \
+  [--rescue_frac 0.10] \
+  [--merge_dist 2 | --merge_frac 0.2] \
+  [--forced_no 0] \
+  [--plot]
 ```
 
 ### Arguments:
