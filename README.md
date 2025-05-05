@@ -169,5 +169,82 @@ python3 bd_assign.py \
 
 ---
 
+# 3. BD Rhapsody-Style Parallel Demultiplexer
 
+## 🔍 Purpose
+Demultiplex a cleaned, barcode‐trimmed FASTQ into per‐cell FASTQ files by matching each read’s extracted cell barcode (CB) and UMI against a set of **representative barcodes**.  
+Uses fuzzy matching (Levenshtein distance) and parallel processing for speed.
+
+---
+
+## 🛠️ Main Steps
+
+### 1. Load Representative Barcodes  
+Read the list of collapsed “true” barcodes from `--rep_file` (e.g. `CB_count_table.tsv.gz`, column `Representative_CB`).
+
+### 2. Load Read → Barcode Mapping  
+Read the per‐read table `--mapping` (e.g. `barcode_list.tsv.gz`) 
+Build a dictionary `read_id → (raw_CB, UMI)`.
+
+### 3. Pre-map Raw CB → Representative CB  
+In parallel (using `--threads` workers), for each `read_id`:
+- Compute Levenshtein distance between its raw CB and each rep CB
+- Assign the read to the rep with the smallest distance ≤ `--max_mismatch`  
+
+This produces a `premap` lookup: only reads within tolerance are kept.
+
+### 4. Demultiplex FASTQ  
+Stream the trimmed FASTQ (`--input_fastq`) in **chunks**:
+- For each record, look up its `read.id` in `premap`
+- Annotate the header:
+- Write the record into `output_dir/<rep_CB>.fastq.gz`
+
+All I/O is gzip-compatible and thread-safe.
+
+---
+
+## 📂 Input & Output
+
+### Inputs
+- `-i, --input_fastq`  
+Cleaned FASTQ from the extraction step (e.g. `processed.fastq.gz`)
+- `-m, --mapping`  
+TSV(.gz) table mapping `read_id → BC, UMI` (from `barcode_list.tsv.gz`)
+- `-r, --rep_file`  
+TSV(.gz) table of representative barcodes (e.g. `CB_count_table.tsv.gz`)
+
+### Outputs
+- `-o, --output_dir`  
+Directory of per-cell FASTQ files, one `*.fastq.gz` per rep CB
+- **Console summary**:  
+- Total reads scanned  
+- Reads successfully demultiplexed  
+- Number of output files (cells)
+
+---
+
+## ⚙️ Parameters
+
+| Option                    | Description                                                                                     | Default |
+|---------------------------|-------------------------------------------------------------------------------------------------|---------|
+| `-i, --input_fastq`       | Processed FASTQ to demultiplex (gzip OK)                                                        | (none)  |
+| `-m, --mapping`           | Read‐to‐barcode table (`read_id`, `BC`, `UMI`)                                                  | (none)  |
+| `-r, --rep_file`          | Representative CB list (`Representative_CB` column)                                            | (none)  |
+| `-o, --output_dir`        | Output folder for per-cell FASTQ files                                                          | `demux_fastq` |
+| `--max_mismatch`          | Maximum Levenshtein distance for CB→rep matching                                                | `1`     |
+| `-t, --threads`           | Number of parallel workers for pre-mapping and demux                                              | `4`     |
+
+---
+
+## 🔧 Example Usage
+
+```bash
+python3 demultiplex.py \
+-i processed.fastq.gz \
+-m barcode_list.tsv.gz \
+-r CB_count_table.tsv.gz \
+-o demuxed_fastq \
+--max_mismatch 2 \
+-t 8
+```
 
