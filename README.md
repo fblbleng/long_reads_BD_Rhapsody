@@ -247,4 +247,151 @@ python3 demultiplex.py \
 --max_mismatch 2 \
 -t 8
 ```
+** 3`curator.py`** is the per-cell “curation” module of the BD Rhapsody–style long-read single-cell pipeline. It takes demultiplexed FASTQ files (one per cell) and produces **“curated”** BAMs by:
+
+1. **Splice-aware alignment** (Minimap2)  
+2. **Soft-clip filtering** (remove poorly aligned reads)  
+3. **UMI clustering & consensus** (SPOA)  
+4. **Re-mapping consensus** (Minimap2)  
+5. **Merging consensus + singleton reads** → final sorted/indexed BAM  
+
+---
+
+## Inputs
+
+- **`--fq_dir`**  
+  Directory containing per-cell FASTQ files (e.g. `demux_fastq/CTTCAG...TTACTT.fastq.gz`).
+
+- **Reference** (one of):
+  - **`--ref_genome`** — Path to genome FASTA  
+  - **`--idx_genome`** — Path to prebuilt Minimap2 index (`.mmi`)
+
+- **Directories**:
+  - **`--tmp_dir`** — Temporary working folder (default: `tmp`)  
+  - **`--out_dir`** — Final BAM output folder (default: `curator_res`)  
+
+---
+
+## Dependencies
+
+- **Python 3**  
+- **pysam** (for BAM I/O)  
+- **Biopython** (`Bio.SeqIO`)  
+- **Minimap2** (CLI in `$PATH`)  
+- **samtools** (CLI in `$PATH`)  
+- **spoa** (CLI in `$PATH`)  
+
+---
+
+## Installation
+
+```bash
+# Using conda for all dependencies:
+conda install -c bioconda pysam biopython minimap2 samtools spoa
+🚀 Usage
+bash
+Copy
+Edit
+python3 curator.py \
+  --fq_dir     demux_fastq          \
+  --idx_genome /path/to/GRCh38.mmi  \
+  --tmp_dir    bdrhapsody_gps_res/tmp \
+  --out_dir    bdrhapsody_gps_res/final_bams \
+  --threads    8                     \
+  --umi_ld     2                     \
+  --coord_buffer 5                   \
+  --max_umi_duplicates 500           \
+  --softclipping_thr 0.8             \
+  [--keep_meta]                      \
+  [--ref_genome /path/to/GRCh38.fa]  # if no --idx_genome
+--threads: number of parallel workers
+
+--umi_ld: merge UMIs within this Levenshtein distance
+
+--coord_buffer: bp drift buffer when clustering by mapping position
+
+--max_umi_duplicates: cap per-UMI cluster size used to build consensus
+
+--softclipping_thr: require (matches)/(matches+softclips) ≥ threshold
+
+--keep_meta: retain all intermediate BAM/SAM files
+```
+## Step-by-Step Details
+
+### 1. Discover FASTQs
+- Scans `--fq_dir` for `*.fastq` / `*.fastq.gz` files.
+
+### 2. Parallel per-cell processing
+- Spawns `curate_one()` across cells using `multiprocessing.Pool`.
+
+---
+
+### 3. `curate_one(fq_path)`
+  
+**a. Map → Unsorted BAM**  
+```bash
+minimap2 -ax splice <ref> <fastq> \
+  | samtools view -Sb - > tmp/<cell>.unsorted.bam
+```
+**b. Soft-clip filtering**  
+- Keeps reads with a high fraction of aligned bases  
+- Writes dropped reads to `tmp/<cell>.dropped.bam`  
+
+**c. Index filtered BAM**  
+```bash
+samtools index tmp/<cell>.filtered.bam
+```
+**d. Load raw sequences
+
+- Builds a read_id → sequence dictionary from the FASTQ
+
+**e. Cluster by mapping position
+
+Groups reads on the same chromosome within --coord_buffer bp windows
+
+**f. Collapse UMIs (per cluster)
+
+-Extract UMI tag from read_id
+
+-Merge UMI groups within Levenshtein distance ≤ --umi_ld
+
+-Write a tiny FASTA and run spoa → consensus sequence
+
+*Collect:
+
+-consensus: polished sequences
+
+-duplicates: reads used to build consensus
+
+-singletons: UMIs with only one read
+
+**g. Write consensus FASTA
+
+tmp/<cell>.consensus.fa
+
+**h. Extract singleton BAM
+
+- From tmp/<cell>.filtered.bam
+
+**i. Remap consensus → sorted/indexed BAM
+
+```bash
+
+minimap2 -ax splice <ref> tmp/<cell>.consensus.fa \
+  | samtools view -Sb - \
+  | samtools sort -o tmp/<cell>.consensus.curated.bam
+samtools index tmp/<cell>.consensus.curated.bam
+```
+**j. Merge consensus + singleton BAM → final sorted/indexed BAM
+
+```bash
+
+samtools cat tmp/<cell>.consensus.curated.bam tmp/<cell>.singleton.bam \
+  | samtools sort -o <out_dir>/<cell>.curated.bam
+samtools index <out_dir>/<cell>.curated.bam
+```
+**k. Clean up
+
+- Removes all intermediate files unless --keep_meta is set
+
 
