@@ -247,7 +247,7 @@ python3 demultiplex.py \
 --max_mismatch 2 \
 -t 8
 ```
-** 3`curator.py`** is the per-cell “curation” module of the BD Rhapsody–style long-read single-cell pipeline. It takes demultiplexed FASTQ files (one per cell) and produces **“curated”** BAMs by:
+** 4 Curation step  takes per-cell demultiplexed FASTQ files (one per cell) and produces **“curated”** BAMs by:
 
 1. **Splice-aware alignment** (Minimap2)  
 2. **Soft-clip filtering** (remove poorly aligned reads)  
@@ -257,16 +257,24 @@ python3 demultiplex.py \
 
 ---
 
+### Reference indexing
+Build a .mmi for splice mode:
+
+```bash
+minimap2 -d GRCh38.mmi Homo_sapiens.GRCh38.dna.primary_assembly.fa
+```
+Use the same genome (and matching GTF) downstream for quantification.
+
 ## Inputs
 
-- **`--fq_dir`**  
+- ***`--fq_dir`**  
   Directory containing per-cell FASTQ files (e.g. `demux_fastq/CTTCAG...TTACTT.fastq.gz`).
 
-- **Reference** (one of):
-  - **`--ref_genome`** — Path to genome FASTA  
-  - **`--idx_genome`** — Path to prebuilt Minimap2 index (`.mmi`)
+- ***Reference** (one of):
+  - ****`--ref_genome`**** — Path to genome FASTA  
+  - ****`--idx_genome`**** — Path to prebuilt Minimap2 index (`.mmi`)
 
-- **Directories**:
+- ***Directories**:
   - **`--tmp_dir`** — Temporary working folder (default: `tmp`)  
   - **`--out_dir`** — Final BAM output folder (default: `curator_res`)  
 
