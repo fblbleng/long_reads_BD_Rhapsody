@@ -402,4 +402,106 @@ samtools index <out_dir>/<cell>.curated.bam
 
 - Removes all intermediate files unless --keep_meta is set
 
+# Reporter Expression Pipeline
 
+## 🔍 Purpose
+This script generates a gene-by-cell expression matrix from per-cell curated BAM files produced by the Curator step. It:
+
+- Counts reads overlapping annotated genes using **featureCounts**
+- Aggregates per-cell counts into a single matrix
+- Filters out low-quality cells with too few detected genes
+
+## 📂 Input Requirements
+
+### 1. Per-cell curated BAMs
+- Directory of `*.curated.bam` files (each must be indexed with `.bai`)
+- Produced by `curator.py` into `<out_dir>` (default: `bdrhapsody_gps_res`)
+
+### 2. GTF annotation (`--gtf`)
+- A standard gene annotation file (e.g., Gencode or Ensembl GTF) matching your reference genome
+
+### 3. Filtered barcode list (`--sel_bc_o`)
+- Plain-text file listing one accepted cell barcode per line
+- Only BAMs whose cell ID appears in this list will be quantified
+
+## 🛠️ Workflow
+
+1. **Discover curated BAMs**  
+   Scans `<O_DIR>` for `*.curated.bam` files.
+
+2. **Optional barcode filtering**  
+   If `--sel_bc_o` is provided, restrict to those cell IDs; otherwise process all BAMs.
+
+3. **Run featureCounts**  
+   For each cell:
+
+   ``` bash
+   featureCounts \
+     -T <threads> \
+     -a <gtf> \
+     -o <tmp_dir>/<cell>.counts.txt \
+     <out_dir>/<cell>.curated.bam
+
+## Detailed Workflow Steps
+
+### FeatureCounts Execution
+- Uses `featureCounts` to quantify reads per gene per cell
+- **Custom binary path**: Use `--featurecounts` to override the path to the featureCounts binary if not in system PATH
+
+### Aggregate Counts
+1. Parse each `<cell>.counts.txt` file
+2. Build a sparse matrix with:
+   - Rows: `gene_id` (from GTF)
+   - Columns: Cell barcodes
+   - Values: Raw read counts
+
+### Quality Filtering
+- Removes any cell (column) with fewer than `--min_gene_no` detected genes
+- Filter threshold is configurable (default: 300 genes)
+
+### Output Generation
+- Writes final matrix as TSV:
+  - File: `<O_DIR>/<o_name>` (default: `matrix.tsv`)
+  - Format:
+    ```
+    gene_id    cell1    cell2    ...
+    ENSG0001   15       0        ...
+    ENSG0002   3        42       ...
+    ```
+
+### Logging & Metadata
+- Progress and timing logged to `--log` (default: `bdrhapsody_gps_res/logs/reporter_expression.log.txt`)
+- Intermediate files:
+  - Kept in `--tmp_dir` if `--keep_meta` is set
+  - Otherwise automatically cleaned up
+
+## Command-Line Options
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `-h`, `--help` | Show help message | |
+| `-d O_DIR` | Output directory | `bdrhapsody_gps_res` |
+| `--tmp_dir TMP_DIR` | Temp directory for counts | `tmp` |
+| `--gtf GTF` | (Required) Gene annotation GTF | |
+| `-o O_NAME` | Output matrix filename | `matrix.tsv` |
+| `--log LOG_F_NAME` | Log file path | `bdrhapsody_gps_res/logs/reporter_expression.log.txt` |
+| `-t NCORES` | CPU threads | `1` |
+| `--min_gene_no MIN_GENE_NO` | Min genes per cell | `300` |
+| `--sel_bc_o SEL_BC_O` | Barcode whitelist file | `filtered_barcode_list.txt` |
+| `--keep_meta` | Keep temp count files | `False` |
+| `--featurecounts FEATURECOUNTS` | Path to featureCounts binary | `featureCounts` |
+
+## Example Usage
+
+```bash
+python3 reporter_expression.py \
+  -d bdrhapsody_gps_res \
+  --tmp_dir bdrhapsody_gps_res/tmp \
+  --gtf /path/to/gencode.v44.annotation.gtf \
+  -o gene_matrix.tsv \
+  --log bdrhapsody_gps_res/logs/expression.log.txt \
+  -t 8 \
+  --min_gene_no 50 \
+  --sel_bc_o filtered_barcodes.txt \
+  --featurecounts /usr/local/bin/featureCounts
+```
