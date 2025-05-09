@@ -3,9 +3,9 @@
 ## 🔍 Purpose
 Preprocess long-read single-cell RNA-seq data to extract:
 
-- **Cell Barcodes (CB)**
-- **Unique Molecular Identifiers (UMIs)**
-- **Valid insert sequences**
+- ###Cell Barcodes (CB)###
+- ###Unique Molecular Identifiers (UMIs)###
+- ###Valid insert sequences###
 
 ... from Nanopore-style reads using BD Rhapsody structure and polyA tail confirmation.
 
@@ -14,8 +14,8 @@ Preprocess long-read single-cell RNA-seq data to extract:
 ## 🛠️ Main Steps Performed
 
 ### 1. Adapter Detection
-- Scans the **first 150 bp (head)** for adapter in **forward orientation**
-- Scans the **last 150 bp (tail)** for adapter in **reverse-complemented orientation**
+- Scans the ###first 150 bp (head)### for adapter in ###forward orientation###
+- Scans the ###last 150 bp (tail)### for adapter in ###reverse-complemented orientation###
 - Allows up to `--max_mismatch` (default: 4) using Levenshtein distance
 
 ### 2. Barcode & UMI Extraction
@@ -24,7 +24,7 @@ Preprocess long-read single-cell RNA-seq data to extract:
   - Then extracts `--umi_len` (default: 8 nt) after that
 
 ### 3. PolyA/PolyT Tail Validation
-- After CB + UMI, checks **within the next 50 nt** for a **polyA or polyT tail**
+- After CB + UMI, checks ###within the next 50 nt### for a ###polyA or polyT tail###
 - Ensures the read likely came from an mRNA transcript
 
 ### 4. Insert Trimming & Filtering
@@ -70,7 +70,7 @@ This pipeline is designed to:
 - Merge similar CBs based on sequence similarity (Levenshtein distance)
 - Prepare an output table with cleaned, representative CBs
 
-It **does NOT** collapse UMIs at this stage (UMI collapsing is to be done later).
+It ###does NOT### collapse UMIs at this stage (UMI collapsing is to be done later).
 
 ---
 
@@ -93,35 +93,35 @@ zcat barcode_list.tsv.gz \
 ```
 ## How It Works
 ### 1. Load & Filter
-- **Input**: the UMI-count table (`CB_count_table.tsv.gz`) with columns `BC` (barcode) and `UMI`.  
-- **Filter**: drop any barcode with fewer than `--min_umi_per_cb` UMIs.  
-- **Sort**: descending by UMI count.
+- ###Input###: the UMI-count table (`CB_count_table.tsv.gz`) with columns `BC` (barcode) and `UMI`.  
+- ###Filter###: drop any barcode with fewer than `--min_umi_per_cb` UMIs.  
+- ###Sort###: descending by UMI count.
 
 ### 2. Detect Knee & Rescue
-- Compute **log₁₀(UMI + 1)** versus barcode rank.  
+- Compute ###log₁₀(UMI + 1)### versus barcode rank.  
 - Calculate per-point slope via numerical gradient.  
-- **Smooth** slopes by binning on log₁₀(rank) (`--smooth_res`) and take the bin with the lowest median slope → **knee**.  
-- Extend cutoff by `1 + rescue_frac` (e.g. +10 %) → **rescue**.
+- ###Smooth### slopes by binning on log₁₀(rank) (`--smooth_res`) and take the bin with the lowest median slope → ###knee###.  
+- Extend cutoff by `1 + rescue_frac` (e.g. +10 %) → ###rescue###.
 
 ### 3. Select Barcodes
-- Mark all barcodes from rank 1 up through the **rescue** rank as **selected_raw**.
+- Mark all barcodes from rank 1 up through the ###rescue### rank as ###selected_raw###.
 
 ### 4. Merge Barcodes
-- Take the **selected_raw** barcodes and cluster them by Levenshtein distance:
-  - **Absolute** cutoff: `--merge_dist` (e.g. ≤ 2)
-  - **Fractional** cutoff: `--merge_frac` × (BC length), if specified
-- Collapse each cluster into a single **representative** barcode (`rep_id`).
+- Take the ###selected_raw### barcodes and cluster them by Levenshtein distance:
+  - ###Absolute### cutoff: `--merge_dist` (e.g. ≤ 2)
+  - ###Fractional### cutoff: `--merge_frac` × (BC length), if specified
+- Collapse each cluster into a single ###representative### barcode (`rep_id`).
 
 ### 5. Output
-- **Extended count table** (`--count_out`):
+- ###Extended count table### (`--count_out`):
   - Columns:  
     - `BC`   (original barcode)  
     - `UMI`  (UMI count)  
     - `rep_id` (collapsed representative barcode)  
     - `selected_raw` (True if ≤ rescue rank)  
-- **Merged list** (`--merged_out`):
+- ###Merged list### (`--merged_out`):
   - One line per `rep_id`, listing its member barcodes.  
-- **Optional plot** (`--plot`):
+- ###Optional plot### (`--plot`):
   - Saves `knee_rescue.png` showing the log-log UMI curve with knee & rescue cutoffs.
 
 ---
@@ -172,7 +172,7 @@ python3 bd_assign.py \
 # 3. BD Rhapsody-Style Parallel Demultiplexer
 
 ## 🔍 Purpose
-Demultiplex a cleaned, barcode‐trimmed FASTQ into per‐cell FASTQ files by matching each read’s extracted cell barcode (CB) and UMI against a set of **representative barcodes**.  
+Demultiplex a cleaned, barcode‐trimmed FASTQ into per‐cell FASTQ files by matching each read’s extracted cell barcode (CB) and UMI against a set of ###representative barcodes###.  
 Uses fuzzy matching (Levenshtein distance) and parallel processing for speed.
 
 ---
@@ -194,7 +194,7 @@ In parallel (using `--threads` workers), for each `read_id`:
 This produces a `premap` lookup: only reads within tolerance are kept.
 
 ### 4. Demultiplex FASTQ  
-Stream the trimmed FASTQ (`--input_fastq`) in **chunks**:
+Stream the trimmed FASTQ (`--input_fastq`) in ###chunks###:
 - For each record, look up its `read.id` in `premap`
 - Annotate the header:
 - Write the record into `output_dir/<rep_CB>.fastq.gz`
@@ -216,7 +216,7 @@ TSV(.gz) table of representative barcodes (e.g. `CB_count_table.tsv.gz`)
 ### Outputs
 - `-o, --output_dir`  
 Directory of per-cell FASTQ files, one `*.fastq.gz` per rep CB
-- **Console summary**:  
+- ###Console summary###:  
 - Total reads scanned  
 - Reads successfully demultiplexed  
 - Number of output files (cells)
@@ -247,13 +247,13 @@ python3 demultiplex.py \
 --max_mismatch 2 \
 -t 8
 ```
-** 4 Curation step  takes per-cell demultiplexed FASTQ files (one per cell) and produces **“curated”** BAMs by:
+### 4 Curation step  takes per-cell demultiplexed FASTQ files (one per cell) and produces ###“curated”### BAMs by:
 
-1. **Splice-aware alignment** (Minimap2)  
-2. **Soft-clip filtering** (remove poorly aligned reads)  
-3. **UMI clustering & consensus** (SPOA)  
-4. **Re-mapping consensus** (Minimap2)  
-5. **Merging consensus + singleton reads** → final sorted/indexed BAM  
+1. ###Splice-aware alignment### (Minimap2)  
+2. ###Soft-clip filtering### (remove poorly aligned reads)  
+3. ###UMI clustering & consensus### (SPOA)  
+4. ###Re-mapping consensus### (Minimap2)  
+5. ###Merging consensus + singleton reads### → final sorted/indexed BAM  
 
 ---
 
@@ -267,27 +267,27 @@ Use the same genome (and matching GTF) downstream for quantification.
 
 ## Inputs
 
-- ***`--fq_dir`**  
+- ###*`--fq_dir`###  
   Directory containing per-cell FASTQ files (e.g. `demux_fastq/CTTCAG...TTACTT.fastq.gz`).
 
-- ***Reference** (one of):
-  - ****`--ref_genome`**** — Path to genome FASTA  
-  - ****`--idx_genome`**** — Path to prebuilt Minimap2 index (`.mmi`)
+- ###*Reference### (one of):
+  - ######`--ref_genome`###### — Path to genome FASTA  
+  - ######`--idx_genome`###### — Path to prebuilt Minimap2 index (`.mmi`)
 
-- ***Directories**:
-  - **`--tmp_dir`** — Temporary working folder (default: `tmp`)  
-  - **`--out_dir`** — Final BAM output folder (default: `curator_res`)  
+- ###*Directories###:
+  - ###`--tmp_dir`### — Temporary working folder (default: `tmp`)  
+  - ###`--out_dir`### — Final BAM output folder (default: `curator_res`)  
 
 ---
 
 ## Dependencies
 
-- **Python 3**  
-- **pysam** (for BAM I/O)  
-- **Biopython** (`Bio.SeqIO`)  
-- **Minimap2** (CLI in `$PATH`)  
-- **samtools** (CLI in `$PATH`)  
-- **spoa** (CLI in `$PATH`)  
+- ###Python 3###  
+- ###pysam### (for BAM I/O)  
+- ###Biopython### (`Bio.SeqIO`)  
+- ###Minimap2### (CLI in `$PATH`)  
+- ###samtools### (CLI in `$PATH`)  
+- ###spoa### (CLI in `$PATH`)  
 
 ---
 
@@ -336,28 +336,28 @@ python3 curator.py \
 
 ### 3. `curate_one(fq_path)`
   
-**a. Map → Unsorted BAM**  
+### a. Map → Unsorted BAM ###  
 ```bash
 minimap2 -ax splice <ref> <fastq> \
   | samtools view -Sb - > tmp/<cell>.unsorted.bam
 ```
-**b. Soft-clip filtering**  
+### b. Soft-clip filtering ###  
 - Keeps reads with a high fraction of aligned bases  
 - Writes dropped reads to `tmp/<cell>.dropped.bam`  
 
-**c. Index filtered BAM**  
+### c. Index filtered BAM ###  
 ```bash
 samtools index tmp/<cell>.filtered.bam
 ```
-**d. Load raw sequences
+### d. Load raw sequences
 
 - Builds a read_id → sequence dictionary from the FASTQ
 
-**e. Cluster by mapping position
+### e. Cluster by mapping position
 
 Groups reads on the same chromosome within --coord_buffer bp windows
 
-**f. Collapse UMIs (per cluster)
+###f . Collapse UMIs (per cluster)
 
 -Extract UMI tag from read_id
 
@@ -365,7 +365,7 @@ Groups reads on the same chromosome within --coord_buffer bp windows
 
 -Write a tiny FASTA and run spoa → consensus sequence
 
-*Collect:
+### Collect:
 
 -consensus: polished sequences
 
@@ -373,15 +373,15 @@ Groups reads on the same chromosome within --coord_buffer bp windows
 
 -singletons: UMIs with only one read
 
-**g. Write consensus FASTA
+### g. Write consensus FASTA
 
 tmp/<cell>.consensus.fa
 
-**h. Extract singleton BAM
+###  h. Extract singleton BAM
 
 - From tmp/<cell>.filtered.bam
 
-**i. Remap consensus → sorted/indexed BAM
+### i. Remap consensus → sorted/indexed BAM
 
 ```bash
 
@@ -390,7 +390,7 @@ minimap2 -ax splice <ref> tmp/<cell>.consensus.fa \
   | samtools sort -o tmp/<cell>.consensus.curated.bam
 samtools index tmp/<cell>.consensus.curated.bam
 ```
-**j. Merge consensus + singleton BAM → final sorted/indexed BAM
+### j. Merge consensus + singleton BAM → final sorted/indexed BAM
 
 ```bash
 
@@ -398,7 +398,7 @@ samtools cat tmp/<cell>.consensus.curated.bam tmp/<cell>.singleton.bam \
   | samtools sort -o <out_dir>/<cell>.curated.bam
 samtools index <out_dir>/<cell>.curated.bam
 ```
-**k. Clean up
+### k. Clean up
 
 - Removes all intermediate files unless --keep_meta is set
 
