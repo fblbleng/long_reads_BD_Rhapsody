@@ -14,8 +14,8 @@ Preprocess long-read single-cell RNA-seq data to extract:
 ## 🛠️ Main Steps Performed
 
 ### 1. Adapter Detection
-- Scans the **first 150 bp (head)for adapter in **forward orientation
-- Scans the **last 150 bp (tail) for adapter in **reverse-complemented orientation
+- Scans the **first 150 bp** (head)for adapter in **forward orientation**
+- Scans the **last 150 bp** (tail) for adapter in **reverse-complemented orientation**
 - Allows up to `--max_mismatch` (default: 4) using Levenshtein distance
 
 ### 2. Barcode & UMI Extraction
