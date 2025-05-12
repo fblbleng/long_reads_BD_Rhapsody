@@ -172,7 +172,7 @@ python3 bd_assign.py \
 # 3. BD Rhapsody-Style Parallel Demultiplexer
 
 ## 🔍 Purpose
-Demultiplex a cleaned, barcode‐trimmed FASTQ into per‐cell FASTQ files by matching each read’s extracted cell barcode (CB) and UMI against a set of ###representative barcodes###.  
+Demultiplex a cleaned, barcode‐trimmed FASTQ into per‐cell FASTQ files by matching each read’s extracted cell barcode (CB) and UMI against a set of ### representative barcodes ###.  
 Uses fuzzy matching (Levenshtein distance) and parallel processing for speed.
 
 ---
@@ -216,7 +216,7 @@ TSV(.gz) table of representative barcodes (e.g. `CB_count_table.tsv.gz`)
 ### Outputs
 - `-o, --output_dir`  
 Directory of per-cell FASTQ files, one `*.fastq.gz` per rep CB
-- ###Console summary###:  
+## Console summary:  
 - Total reads scanned  
 - Reads successfully demultiplexed  
 - Number of output files (cells)
