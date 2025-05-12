@@ -216,7 +216,7 @@ TSV(.gz) table of representative barcodes (e.g. `CB_count_table.tsv.gz`)
 ### Outputs
 - `-o, --output_dir`  
 Directory of per-cell FASTQ files, one `*.fastq.gz` per rep CB
-## Console summary:  
+### Console summary:  
 - Total reads scanned  
 - Reads successfully demultiplexed  
 - Number of output files (cells)
@@ -249,8 +249,8 @@ python3 demultiplex.py \
 ```
 ### 4 Curation step  takes per-cell demultiplexed FASTQ files (one per cell) and produces ###“curated”### BAMs by:
 
-1. ###Splice-aware alignment### (Minimap2)  
-2. ###Soft-clip filtering### (remove poorly aligned reads)  
+1. *** Splice-aware alignment *** (Minimap2)  
+2. *** Soft-clip filtering *** (remove poorly aligned reads)  
 3. ###UMI clustering & consensus### (SPOA)  
 4. ###Re-mapping consensus### (Minimap2)  
 5. ###Merging consensus + singleton reads### → final sorted/indexed BAM  
