@@ -41,12 +41,6 @@ Preprocess long-read single-cell RNA-seq data to extract:
 Printed to console after processing:
 - Total reads
 - Reads with valid adapter
-- Reads discarded for:
-  - Adapter not found
-  - Failing minimum insert length
-  - Missing polyA/T
-  - Other QC filters
-
 ---
 
 ## Example Read Structure Expected
@@ -59,7 +53,7 @@ Printed to console after processing:
 *This pipeline ensures high-quality extraction of true mRNA molecules from long-read single-cell datasets, crucial for downstream transcriptomic analyses.*
 
 ```
-python3 bd_rhapsody_barcode_extractor.py -i C10_010425/subset100K.fastq.gz -o processed.fastq.gz -b barcode_list.tsv.gz -a ACACGACGCTCTTCCGATCT --barcode_len 38 --umi_len 8  --scan_region 150 --min_read_length 200 --ncores 8 
+python3 bd_rhapsody_barcode_extractor.py -i ~/Disk/Donnees_brutes/Rhapsody_PC/LongRead/C8_C9/C9.fastq.gz  -o processed_ALL.fastq.gz -b barcode_ALL_list.tsv.gz -a ACACGACGCTCTTCCGATCT --barcode_len 35 --umi_len 8  --scan_region 150 --min_read_length 200 --ncores 40 --chunksize 10000
 ```
 
 ## 2. BD Assigner Pipeline
