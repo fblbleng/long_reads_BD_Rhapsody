@@ -1,163 +1,276 @@
 #!/usr/bin/env python3
 """
-Full Assigner Pipeline: Knee detection, dynamic rescue, and barcode merging
+Barcode Assigner (Jake MAX FINAL Edition):
+- Auto-tune merge_frac
+- BK-Tree barcode merging
+- Percentile UMI filtering
+- Dual logging
+- UMI diagnostics PDF
 """
+
 import argparse
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from collections import defaultdict
+from itertools import combinations
+from rapidfuzz.distance import Levenshtein
+from matplotlib.backends.backend_pdf import PdfPages
+import logging
+import time
 
-# --- Levenshtein distance ---
-def levenshtein(a, b):
-    if len(a) < len(b):
-        return levenshtein(b, a)
-    if not b:
-        return len(a)
-    prev = list(range(len(b) + 1))
-    for i, ca in enumerate(a, 1):
-        curr = [i]
-        for j, cb in enumerate(b, 1):
-            cost = 0 if ca == cb else 1
-            curr.append(min(curr[j-1] + 1,
-                            prev[j]   + 1,
-                            prev[j-1] + cost))
-        prev = curr
-    return prev[-1]
 
-# --- Merge barcodes within edit distance ---
-def merge_barcodes(cbs, max_dist):
+# ─────────────────────────────────────────────────────────────────────────────
+# BK-TREE CLASS
+# ─────────────────────────────────────────────────────────────────────────────
+
+class BKTree:
+    def __init__(self, dist_fn):
+        self.root = None
+        self.dist_fn = dist_fn
+
+    class Node:
+        def __init__(self, word):
+            self.word = word
+            self.children = {}
+
+    def add(self, word):
+        if self.root is None:
+            self.root = self.Node(word)
+            return
+        node = self.root
+        while True:
+            d = self.dist_fn(word, node.word)
+            if d in node.children:
+                node = node.children[d]
+            else:
+                node.children[d] = self.Node(word)
+                break
+
+    def search(self, word, max_dist):
+        results = []
+        if self.root is None:
+            return results
+        candidates = [self.root]
+        while candidates:
+            node = candidates.pop()
+            d = self.dist_fn(word, node.word)
+            if d <= max_dist:
+                results.append(node.word)
+            for k in node.children:
+                if d - max_dist <= k <= d + max_dist:
+                    candidates.append(node.children[k])
+        return results
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DATA PROCESSING + VISUALIZATION
+# ─────────────────────────────────────────────────────────────────────────────
+
+def count_umis_from_chunks(file_path, chunksize=500_000):
+    umi_map = defaultdict(set)
+    for chunk in pd.read_csv(file_path, sep='\t', chunksize=chunksize, usecols=['BC', 'UMI'], dtype=str):
+        for bc, umi in zip(chunk['BC'], chunk['UMI']):
+            umi_map[bc].add(umi)
+    return pd.DataFrame({'BC': list(umi_map), 'UMI': [len(v) for v in umi_map.values()]})
+
+
+def plot_umi_distribution(df, percentile_val=None):
+    fig = plt.figure(figsize=(8, 5))
+    plt.hist(df['UMI'], bins=100, color='orchid', edgecolor='black', log=True)
+    plt.xlabel("UMI Count")
+    plt.ylabel("Number of Barcodes (log)")
+    plt.title("UMI Count Distribution")
+    if percentile_val:
+        plt.axvline(percentile_val, color='red', linestyle='--', label=f"≥ {int(percentile_val)} UMI (percentile)")
+        plt.legend()
+    plt.tight_layout()
+    return fig
+
+def plot_rank_curve(umi_counts, percentile_cutoff):
+    sorted_counts = np.sort(umi_counts)[::-1]
+    ranks = np.arange(1, len(sorted_counts)+1)
+    fig = plt.figure(figsize=(8,5))
+    plt.plot(ranks, sorted_counts, label='UMI counts', color='blue')
+    plt.axhline(percentile_cutoff, color='red', linestyle='--', label=f'≥ {int(percentile_cutoff)} UMI')
+    plt.xscale('log')
+    plt.yscale('log')
+    plt.xlabel("Barcode Rank (log)")
+    plt.ylabel("UMI Count (log)")
+    plt.title("UMI Rank Curve")
+    plt.legend()
+    plt.tight_layout()
+    return fig
+
+def plot_percentile_curve(umi_counts):
+    percentiles = np.arange(90, 100.1, 0.1)
+    thresholds = [np.percentile(umi_counts, p) for p in percentiles]
+    fig = plt.figure(figsize=(8,5))
+    plt.plot(percentiles, thresholds, marker='o', color='darkgreen')
+    plt.xlabel("Percentile")
+    plt.ylabel("UMI Threshold")
+    plt.title("UMI Threshold by Percentile")
+    plt.grid(True)
+    plt.tight_layout()
+    return fig
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MERGING + LOGGING
+# ─────────────────────────────────────────────────────────────────────────────
+
+def auto_tune_merge_frac(barcodes, percentile=95, sample_size=1000):
+    sample = barcodes[:sample_size]
+    dists = [Levenshtein.distance(a, b) for a, b in combinations(sample, 2)]
+    est_ld = np.percentile(dists, percentile)
+    bc_len = len(sample[0])
+    merge_frac = est_ld / bc_len
+    return merge_frac, dists
+
+
+def merge_barcodes_bktree(cbs, max_dist, log):
+    tree = BKTree(Levenshtein.distance)
     reps = []
     merged = {}
-    for bc in cbs:
-        placed = False
-        for rep in reps:
-            if levenshtein(bc, rep) <= max_dist:
-                merged[rep].append(bc)
-                placed = True
-                break
-        if not placed:
+    for i, bc in enumerate(cbs):
+        matches = tree.search(bc, max_dist)
+        if matches:
+            rep = matches[0]
+            merged[rep].append(bc)
+        else:
+            tree.add(bc)
             reps.append(bc)
             merged[bc] = [bc]
+        if i % 10000 == 0 and i > 0:
+            log.info(f"🧬 Merged {i}/{len(cbs)} barcodes")
     return reps, merged
 
-# --- Knee & Rescue detection ---
-def detect_knee_and_rescue(umi_counts, smooth_res, rescue_frac):
-    n = len(umi_counts)
-    if n < 2:
-        return 0, 0
-    ranks = np.arange(1, n+1)
-    log_counts = np.log10(umi_counts + 1)
-    slopes = np.gradient(log_counts)
-    log_ranks = np.log10(ranks)
-    bin_idx = np.floor(log_ranks / smooth_res).astype(int)
-    df = pd.DataFrame({'bin': bin_idx, 'slope': slopes})
-    medians = df.groupby('bin')['slope'].median()
-    best_bin = medians.idxmin()
-    idxs = df.index[df['bin']==best_bin].tolist()
-    if not idxs:
-        knee = int(np.argmin(slopes))
-    else:
-        knee = idxs[0]
-    rescue = min(int(knee * (1 + rescue_frac)), n-1)
-    return knee, rescue
+
+def setup_logging(log_file=None):
+    log = logging.getLogger("BarcodeAssigner")
+    log.setLevel(logging.INFO)
+    formatter = logging.Formatter('[%(asctime)s] %(levelname)s: %(message)s', datefmt='%H:%M:%S')
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    log.addHandler(console_handler)
+    if log_file:
+        file_handler = logging.FileHandler(log_file, mode='w')
+        file_handler.setFormatter(formatter)
+        log.addHandler(file_handler)
+    return log
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MAIN
+# ─────────────────────────────────────────────────────────────────────────────
 
 def main():
-    p = argparse.ArgumentParser(
-        description="Assigner: knee detection + dynamic rescue + barcode merging"
-    )
-    p.add_argument('-i','--input', required=True,
-                   help='CB count table (BC and UMI columns, tab-delimited)')
-    p.add_argument('-o','--count_out', default='CB_counting_ext.tsv.gz',
-                   help='Extended UMI count table output')
-    p.add_argument('-m','--merged_out', default='CB_merged_list.txt',
-                   help='Merged barcode list output')
-    p.add_argument('--min_umi_per_cb', type=int, default=1,
-                   help='Filter barcodes with fewer than this UMI count')
-    p.add_argument('--smooth_res', type=float, default=0.001,
-                   help='Log10‐rank bin width for slope smoothing')
-    p.add_argument('--rescue_frac', type=float, default=0.10,
-                   help='Fractional extension past knee (e.g. 0.1)')
-    p.add_argument('--merge_dist', type=int, default=None,
-                   help='(Optional) absolute LD threshold to merge barcodes')
-    p.add_argument('--merge_frac', type=float, default=None,
-                   help='(Optional) fraction of BC length to use as LD merge threshold (e.g. 0.2)')
-    p.add_argument('--forced_no', type=int, default=0,
-                   help='If >0, force fixed number of barcodes (skip knee)')
-    p.add_argument('--plot', action='store_true',
-                   help='Save knee+rescue plot to "knee_rescue.png"')
+    start_time = time.time()
+
+    p = argparse.ArgumentParser()
+    g = p.add_mutually_exclusive_group(required=True)
+    g.add_argument('--input_raw_reads')
+    g.add_argument('--input_counts')
+    p.add_argument('-o', '--count_out', default='CB_counting_ext.tsv.gz')
+    p.add_argument('-m', '--merged_out', default='CB_merged_list.txt')
+    p.add_argument('--min_umi_per_cb', type=int, default=1)
+    p.add_argument('--umi_percentile', type=float)
+    p.add_argument('--merge_frac', type=str, default='0.2', help='"auto" or float')
+    p.add_argument('--plot', action='store_true')
+    p.add_argument('--log_file', help='Optional log file path')
     args = p.parse_args()
 
-    # --- 1) Load & filter ---
-    df = pd.read_csv(args.input, sep='\t', compression='infer',
-                     dtype={'BC': str})
-    df['UMI'] = pd.to_numeric(df['UMI'], errors='coerce').fillna(0).astype(int)
+    log = setup_logging(args.log_file)
+    log.info("🧬 Barcode Assigner STARTED")
+
+    # ─ Load ─
+    t1 = time.time()
+    if args.input_raw_reads:
+        df = count_umis_from_chunks(args.input_raw_reads)
+        log.info("Loaded raw reads")
+    else:
+        df = pd.read_csv(args.input_counts, sep='\t', compression='infer', dtype={'BC': str})
+        df['UMI'] = pd.to_numeric(df['UMI'], errors='coerce').fillna(0).astype(int)
+        log.info("Loaded UMI count table")
+    log.info(f"Loaded {len(df)} barcodes in {time.time() - t1:.2f}s")
+
+    # ─ Filter ─
     df = df[df['UMI'] >= args.min_umi_per_cb].copy()
     df = df.sort_values('UMI', ascending=False).reset_index(drop=True)
-
     umi_counts = df['UMI'].values
 
-    # --- 2) Knee detection ---
-    if args.forced_no > 0:
-        knee = rescue = args.forced_no - 1
-        print(f"Forced to top {args.forced_no} barcodes → knee={knee+1}")
+    # ─ UMI Filtering ─
+    if args.umi_percentile is not None:
+        perc_val = np.percentile(umi_counts, args.umi_percentile)
+        df['selected_raw'] = df['UMI'] >= perc_val
+        log.info(f"Selected {df['selected_raw'].sum()} barcodes (UMI ≥ {int(perc_val)}, ≥ {args.umi_percentile}th percentile)")
     else:
-        knee, rescue = detect_knee_and_rescue(
-            umi_counts, args.smooth_res, args.rescue_frac
-        )
-        print(f"Knee at rank {knee+1}, rescue at {rescue+1}")
+        perc_val = np.percentile(umi_counts, 99)
+        df['selected_raw'] = True
+        log.info("No percentile filtering used; selected all")
 
-    # mark selected
-    df['selected_raw'] = False
-    df.loc[:rescue, 'selected_raw'] = True
+    top_bcs = df[df['selected_raw']]['BC'].tolist()
 
-    # --- 3) Determine merge threshold ---
-    top_bcs = df.loc[df['selected_raw'], 'BC'].tolist()
-    if args.merge_dist is not None:
-        max_dist = args.merge_dist
-    elif args.merge_frac is not None:
-        # use length of first barcode as reference
-        bc_len = len(top_bcs[0]) if top_bcs else 0
-        max_dist = int(bc_len * args.merge_frac)
+    # ─ Plots to PDF ─
+    if args.plot:
+        fig1 = plot_umi_distribution(df, percentile_val=perc_val)
+        fig2 = plot_rank_curve(umi_counts, perc_val)
+        fig3 = plot_percentile_curve(umi_counts)
+        with PdfPages("umi_analysis_plots.pdf") as pdf:
+            pdf.savefig(fig1)
+            pdf.savefig(fig2)
+            pdf.savefig(fig3)
+        log.info("📄 Saved UMI analysis plots → umi_analysis_plots.pdf")
+
+    # ─ Merge Frac ─
+    if args.merge_frac == 'auto':
+        merge_frac, pre_dists = auto_tune_merge_frac(top_bcs)
+        log.info(f"Auto-tuned merge_frac = {merge_frac:.3f}")
+        if args.plot:
+            plt.figure()
+            plt.hist(pre_dists, bins=range(0, max(pre_dists)+2), color='skyblue', edgecolor='black')
+            plt.title("Pre-Merge Pairwise LD")
+            plt.tight_layout()
+            plt.savefig("ld_premerge.png")
     else:
-        max_dist = 1
+        merge_frac = float(args.merge_frac)
 
-    # --- 4) Merge barcodes ---
-    reps, merged = merge_barcodes(top_bcs, max_dist)
-    print(f"Collapsed {len(top_bcs)} → {len(reps)} representative barcodes (LD≤{max_dist})")
+    max_dist = int(len(top_bcs[0]) * merge_frac)
+    log.info(f"Using merge_frac={merge_frac:.3f} → LD ≤ {max_dist}")
 
-    # annotate rep IDs in df
-    rep_map = {}
-    for rep, members in merged.items():
-        for bc in members:
-            rep_map[bc] = rep
+    # ─ Merge ─
+    t2 = time.time()
+    reps, merged = merge_barcodes_bktree(top_bcs, max_dist, log)
+    log.info(f"Merged {len(top_bcs)} → {len(reps)} barcodes in {time.time() - t2:.2f}s")
+
+    # ─ Post-Merge LD plot ─
+    if args.plot:
+        post_dists = []
+        for rep, group in merged.items():
+            for bc in group:
+                if bc != rep:
+                    post_dists.append(Levenshtein.distance(bc, rep))
+        plt.figure()
+        plt.hist(post_dists, bins=range(0, max(post_dists)+2), color='orange', edgecolor='black')
+        plt.title("Post-Merge Distances")
+        plt.tight_layout()
+        plt.savefig("ld_postmerge.png")
+
+    # ─ Output ─
+    rep_map = {bc: rep for rep, members in merged.items() for bc in members}
     df['rep_id'] = df['BC'].map(rep_map).fillna(df['BC'])
 
-    # --- 5) Write extended count table ---
-    out_cols = ['BC','UMI','rep_id','selected_raw']
     df.to_csv(args.count_out, sep='\t', index=False, compression='gzip',
-              columns=out_cols)
+              columns=['BC', 'UMI', 'rep_id', 'selected_raw'])
+    log.info(f"Wrote count table → {args.count_out}")
 
-    # --- 6) Write merged list ---
     with open(args.merged_out, 'w') as fw:
         for rep in reps:
             fw.write(f"{rep}:\t{','.join(merged[rep])}\n")
+    log.info(f"Wrote merged list → {args.merged_out}")
 
-    # --- 7) Optional plot ---
-    if args.plot:
-        import matplotlib.pyplot as plt
-        ranks = np.arange(len(umi_counts))
-        log_counts = np.log10(umi_counts + 1)
-        plt.figure()
-        plt.plot(ranks, log_counts, label='log10(UMI+1)')
-        plt.axvline(knee, color='r', linestyle='--', label='Knee')
-        plt.axvline(rescue, color='g', linestyle='--', label='Rescue')
-        plt.xlabel('Rank')
-        plt.ylabel('log10(UMI+1)')
-        plt.title('Knee & Rescue')
-        plt.legend()
-        plt.savefig('knee_rescue.png')
-        print("Saved plot to knee_rescue.png")
+    log.info(f"✅ Pipeline complete in {time.time() - start_time:.2f}s")
+
 
 if __name__ == '__main__':
     main()
-
