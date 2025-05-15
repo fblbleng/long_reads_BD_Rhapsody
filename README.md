@@ -61,7 +61,14 @@ Printed to console after processing:
 ```
 python3 bd_rhapsody_barcode_extractor.py -i C10_010425/subset100K.fastq.gz -o processed.fastq.gz -b barcode_list.tsv.gz -a ACACGACGCTCTTCCGATCT --barcode_len 38 --umi_len 8  --scan_region 150 --min_read_length 200 --ncores 8 
 ```
+
 ## 2. BD Assigner Pipeline
+
+*Prepare the input file for the Assigner step, in order to have a list of number of total UMI for each hypotetic barcode
+
+```
+( printf "BC\tUMI\n" && zcat barcode_ALL_list.tsv.gz | cut -f4,5 | sort -u | cut -f1 | sort | uniq -c | sort -k1,1nr | awk '{print $2 "\t" $1}' ) | gzip > ALL_count_table.tsv.gz
+```
 
 ## 🔬 Purpose
 
