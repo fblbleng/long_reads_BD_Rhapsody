@@ -57,12 +57,7 @@ python3 bd_rhapsody_barcode_extractor.py -i ~/Disk/Donnees_brutes/Rhapsody_PC/Lo
 ```
 
 ## 2. BD Assigner Pipeline
-
-*Prepare the input file for the Assigner step, in order to have a list of number of total UMI for each hypotetic barcode
-
-```
-( printf "BC\tUMI\n" && zcat barcode_ALL_list.tsv.gz | cut -f4,5 | sort -u | cut -f1 | sort | uniq -c | sort -k1,1nr | awk '{print $2 "\t" $1}' ) | gzip > ALL_count_table.tsv.gz
-```
+`
 
 ## 🔬 Purpose
 
@@ -75,23 +70,6 @@ It ###does NOT### collapse UMIs at this stage (UMI collapsing is to be done late
 
 ---
 
-
-## 📋 Preliminary: Generate UMI‐count Table
-
-If you haven’t already built the CB × UMI count table from your raw `barcode_list.tsv.gz`, run:
-
-```bash
-printf "BC\tUMI\n" && \
-zcat barcode_list.tsv.gz \
-  | cut -f4,5 \               # extract BC and UMI
-  | sort -u \                 # unique BC-UMI pairs
-  | cut -f1 \                 # keep only BC
-  | sort \                    # sort barcodes
-  | uniq -c \                 # count UMIs per BC
-  | sort -k1,1nr \            # descending by UMI count
-  | awk '{print $2 "\t"$1}'   # swap and format as "BC<TAB>UMI"
-| gzip > CB_count_table.tsv.gz
-```
 ## How It Works
 ### 1. Load & Filter
 - ###Input###: the UMI-count table (`CB_count_table.tsv.gz`) with columns `BC` (barcode) and `UMI`.  
