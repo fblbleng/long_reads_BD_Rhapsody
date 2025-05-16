@@ -218,13 +218,7 @@ Directory of per-cell FASTQ files, one `*.fastq.gz` per rep CB
 ## 🔧 Example Usage
 
 ```bash
-python3 demultiplex.py \
--i processed.fastq.gz \
--m barcode_list.tsv.gz \
--r CB_count_table.tsv.gz \
--o demuxed_fastq \
---max_mismatch 2 \
--t 8
+python3 demultiplexer.py -i processed_ALL.fastq.gz -t barcode_ALL_list.tsv.gz  -m CB_ALL_merged_list.txt   -o demux_C9.fastq.gz   --max_mismatch 7  -T 20 
 ```
 ### 4 Curation step  takes per-cell demultiplexed FASTQ files (one per cell) and produces ###“curated”### BAMs by:
 
